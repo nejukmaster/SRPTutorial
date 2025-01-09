@@ -78,6 +78,7 @@ float4 LitPassFragment(Varyings input) : SV_TARGET{
 	surface.position = input.positionWS;
 	surface.normal = normalize(input.normalWS);
 	surface.viewDirection = normalize(_WorldSpaceCameraPos - input.positionWS);
+	surface.depth = -TransformWorldToView(input.positionWS).z;
 	surface.color = base.rgb;
 	surface.alpha = base.a; 
 	//BRDF 구현을 위한 Metailic값과 Smooothness 값을 넘겨준다.

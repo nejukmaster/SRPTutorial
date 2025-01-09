@@ -17,7 +17,8 @@ public class Shadows
             dirShadowMatricesId = Shader.PropertyToID("_DirectionalShadowMatrices"),
             //캐스케이드 단계 수와 Culling Sphere 정보를 담는 ShaderProperty를 정의
             cascadeCountId = Shader.PropertyToID("_CascadeCount"),
-		    cascadeCullingSpheresId = Shader.PropertyToID("_CascadeCullingSpheres");
+            cascadeCullingSpheresId = Shader.PropertyToID("_CascadeCullingSpheres"),
+            shadowDistanceFadeId = Shader.PropertyToID("_ShadowDistanceFade");
 
     //Culling Sphere는 각 캐스케이드 단계가 그림자를 생성하는 영역을 정의하는 구 영역입니다.
     //이는 구의 위치 x,y,z와 구의 반지를 w로 구성되는 Vector4로 정의됩니다.
@@ -133,6 +134,15 @@ public class Shadows
         );
         //그림자 변환 행렬을 global shader property로 넘겨줍니다.
         buffer.SetGlobalMatrixArray(dirShadowMatricesId, dirShadowMatrices);
+        //그림자 최대거리를 프로퍼티로 넘겨줍니다.
+        //이때 Fading 효과를 계산할 때, 연산을 간단히 하기 위해 역수로 넘겨줍니다.
+        //Depth값에 따른 선형 Fading: Strength = (1-depth/shadowMaxDistance)/fadingFactor
+        //Casecade Sphere 영역에 따른 구형 Fading: Strength = (1-distance^2/sphereRadius^2)/fadingFactor
+        float f = 1f - settings.directional.cascadeFade;
+        buffer.SetGlobalVector(
+            shadowDistanceFadeId,
+            new Vector4(1f / settings.maxDistance, 1f / settings.distanceFade, 1f/(1f-f*f))
+        );
         buffer.EndSample(bufferName);
         ExecuteBuffer();
     }

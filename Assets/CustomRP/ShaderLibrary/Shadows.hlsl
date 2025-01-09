@@ -15,6 +15,7 @@ CBUFFER_START(_CustomShadows)
 	int _CascadeCount;
 	float4 _CascadeCullingSpheres[MAX_CASCADE_COUNT];
 	float4x4 _DirectionalShadowMatrices[MAX_SHADOWED_DIRECTIONAL_LIGHT_COUNT * MAX_CASCADE_COUNT];
+	float4 _ShadowDistanceFade;
 CBUFFER_END
 
 struct ShadowData {
@@ -22,15 +23,27 @@ struct ShadowData {
 	float strength;
 };
 
+float FadedShadowStrength(float distance, float scale, float fade) {
+	return saturate((1.0 - distance * scale) * fade);
+}
+
 ShadowData GetShadowData(Surface surfaceWS) {
 	ShadowData data;
-	data.strength = 1.0;
+	//strength를 초기화할 때, surface의 depth가 그림자 최대 랜더링 거리보다 작으면 1, 그렇지 않으면 0으로 설정해 범위 밖 그림자를 랜더링하지 않는다.
+	data.strength = FadedShadowStrength(
+		surfaceWS.depth, _ShadowDistanceFade.x, _ShadowDistanceFade.y
+	);
 	//캐스케이드 Culling Sphere를 순회하며 표면이 속해있는 Culling Sphere의 인덱스를 탐색
 	int i;
 	for (i = 0; i < _CascadeCount; i++) {
 		float4 sphere = _CascadeCullingSpheres[i];
 		float distanceSqr = DistanceSquared(surfaceWS.position, sphere.xyz);
 		if (distanceSqr < sphere.w) {
+			if (i == _CascadeCount - 1) {
+				data.strength *= FadedShadowStrength(
+					distanceSqr, 1.0 / sphere.w, _ShadowDistanceFade.z
+				);
+			}
 			break;
 		}
 	}
