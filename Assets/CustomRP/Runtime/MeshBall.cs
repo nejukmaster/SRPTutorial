@@ -1,6 +1,8 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering;
+
 
 public class MeshBall : MonoBehaviour
 {
@@ -34,8 +36,7 @@ public class MeshBall : MonoBehaviour
                 ), Vector3.one * Random.Range(0.5f, 1.5f)
             );
 
-            baseColors[i] =
-                new Vector4(Random.value, Random.value, Random.value, Random.Range(0.5f, 1f));
+            baseColors[i] = new Vector4(Random.value, Random.value, Random.value, Random.Range(0.5f, 1f));
             metallic[i] = Random.value < 0.25f ? 1f : 0f;
             smoothness[i] = Random.Range(0.05f, 0.95f);
         }
@@ -49,9 +50,30 @@ public class MeshBall : MonoBehaviour
             block.SetVectorArray(baseColorId, baseColors);
             block.SetFloatArray(metallicId, metallic);
             block.SetFloatArray(smoothnessId, smoothness);
+
+            //각 인스턴스에 대한 라이트 프로브를 수동 생성하기 위해 각 인스턴스의 생성될 위치를 가져옵니다.
+            var positions = new Vector3[1023];
+            for (int i = 0; i < matrices.Length; i++)
+            {
+                //각 인스턴스의 위치는 변환행렬의 마지막 열에 저장되어있습니다.
+                positions[i] = matrices[i].GetColumn(3);
+            }
+            //라이트 프로브의 정보는 SphericalHarmonicsL2 객체로 전달됩니다.
+            var lightProbes = new SphericalHarmonicsL2[1023];
+            var occlusionProbes = new Vector4[1023];
+            //CalculateInterpolatedLightAndOcclusionProbes 스태틱 메서드로 라이트 프로브 배열을 채웁니다. 이때 세번째 인수는 LPPV를 사용할 떄 Occlusion 데이터를 저장할 주소입니다.
+            LightProbes.CalculateInterpolatedLightAndOcclusionProbes(
+                positions, lightProbes, occlusionProbes
+            );
+            //만든 SphericalharmonicsL2 배열을 block에 복사하여 등록해줍니다.
+            block.CopySHCoefficientArraysFrom(lightProbes);
+            //얻은 오클루젼 데이터를 등록해줍니다.
+            block.CopyProbeOcclusionArrayFrom(occlusionProbes);
         }
         //DrawMeshInstanced 메서드는 여러개의 객체를 생성할때 사용하며, Transform값을 변환행렬로 받습니다.
         //또한 MaterialPropertyBlock을 인수로 넘겨 해당 인스턴스된 머티리얼에 각기 다른 머티리얼 프로퍼티를 적용할 수 있습니다.
-        Graphics.DrawMeshInstanced(mesh, 0, material, matrices, 1023, block);
+        //쉐도우 캐스팅 모드는 인스턴스가 그림자를 캐스팅할지 여부, 레이어, 카메라를 정합니다.
+        //LightProbeUsage는 인스턴스의 라이트 프로브의 사용 여부를 정합니다.
+        Graphics.DrawMeshInstanced(mesh, 0, material, matrices, 1023, block, ShadowCastingMode.On, true, 0, null, LightProbeUsage.CustomProvided);
     }
 }

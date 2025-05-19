@@ -16,11 +16,30 @@ public class CustomShaderGUI : ShaderGUI
     bool HasProperty(string name) => FindProperty(name, properties, false) != null;
     bool HasPremultiplyAlpha => HasProperty("_PremulAlpha");
 
+    enum ShadowMode
+    {
+        On, Clip, Dither, Off
+    }
+
+    ShadowMode Shadows
+    {
+        set
+        {
+            if (SetProperty("_Shadows", (float)value))
+            {
+                SetKeyword("_SHADOWS_CLIP", value == ShadowMode.Clip);
+                SetKeyword("_SHADOWS_DITHER", value == ShadowMode.Dither);
+            }
+        }
+    }
+
     public override void OnGUI(MaterialEditor materialEditor, MaterialProperty[] properties)
     {
+        EditorGUI.BeginChangeCheck();
         base.OnGUI(materialEditor, properties);
         editor = materialEditor;
         materials = materialEditor.targets;
+        BakedEmission();
         this.properties = properties;
 
         EditorGUILayout.Space();
@@ -31,6 +50,30 @@ public class CustomShaderGUI : ShaderGUI
             ClipPreset();
             FadePreset();
             TransparentPreset();
+        }
+        if (EditorGUI.EndChangeCheck())
+        {
+            SetShadowCasterPass();
+            CopyLightMappingProperties();
+        }
+    }
+
+    void CopyLightMappingProperties()
+    {
+        //Unity의 라이트매퍼가 알아볼 수 있도록, "_BaseMap"과 "_MainTex", "_Color"와 "_BaseColor"를 동기화해줍니다.
+        MaterialProperty mainTex = FindProperty("_MainTex", properties, false);
+        MaterialProperty baseMap = FindProperty("_BaseMap", properties, false);
+        if (mainTex != null && baseMap != null)
+        {
+            mainTex.textureValue = baseMap.textureValue;
+            mainTex.textureScaleAndOffset = baseMap.textureScaleAndOffset;
+        }
+        MaterialProperty color = FindProperty("_Color", properties, false);
+        MaterialProperty baseColor =
+            FindProperty("_BaseColor", properties, false);
+        if (color != null && baseColor != null)
+        {
+            color.colorValue = baseColor.colorValue;
         }
     }
 
@@ -63,6 +106,20 @@ public class CustomShaderGUI : ShaderGUI
             {
                 m.DisableKeyword(keyword);
             }
+        }
+    }
+
+    void SetShadowCasterPass()
+    {
+        MaterialProperty shadows = FindProperty("_Shadows", properties, false);
+        if (shadows == null || shadows.hasMixedValue)
+        {
+            return;
+        }
+        bool enabled = shadows.floatValue < (float)ShadowMode.Off;
+        foreach (Material m in materials)
+        {
+            m.SetShaderPassEnabled("ShadowCaster", enabled);
         }
     }
 
@@ -171,6 +228,20 @@ public class CustomShaderGUI : ShaderGUI
             foreach (Material m in materials)
             {
                 m.renderQueue = (int)value;
+            }
+        }
+    }
+    void BakedEmission()
+    {
+        EditorGUI.BeginChangeCheck();
+        editor.LightmapEmissionProperty();
+        if (EditorGUI.EndChangeCheck())
+        {
+            foreach (Material m in editor.targets)
+            {
+                //기본적으로 Unity의 베이킹은 방출이 0일 경우 Emissive Pass를 수행하지 않아 플래그가 설정되지 않는다.
+                //하지만 우리는 PerObjectProperty를 통해 인스턴싱된 머티리얼을 다루므로 이 기능을 수행하지 않도록 해준다.
+                m.globalIlluminationFlags &= ~MaterialGlobalIlluminationFlags.EmissiveIsBlack;
             }
         }
     }

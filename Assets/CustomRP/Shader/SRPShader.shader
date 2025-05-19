@@ -2,8 +2,8 @@ Shader "Unlit/SRPShader"
 {
     Properties
     {
-        _MainTex ("Texture", 2D) = "white" {}
-        _MainColor("Color", Color) = (1,1,1,0)
+        [HideInInspector] _MainTex("Texture for Lightmap", 2D) = "white" {}
+		[HideInInspector] _Color("Color for Lightmap", Color) = (0.5, 0.5, 0.5, 1.0)
     }
     SubShader
     {

@@ -8,20 +8,6 @@ CBUFFER_START(UnityPerMaterial)
 	float4 _BaseColor;
 CBUFFER_END
 */
-
-//Texture를 사용하기 위해선 TEXTURE2D 매크로를 통해 GPU 메모리에 텍스쳐를 업로드해야 합니다.
-
-TEXTURE2D(_BaseMap);
-SAMPLER(sampler_BaseMap);
-
-//유니티 GPU 인스턴싱을 사용하는 쉐이더의 경우 SRP Batcher를 아래와 같이 적용합니다.
-UNITY_INSTANCING_BUFFER_START(UnityPerMaterial)
-	//텍스쳐 uniform 뒤에 _ST를 붙이면 해당 텍스쳐의 
-	UNITY_DEFINE_INSTANCED_PROP(float4, _BaseMap_ST)
-	UNITY_DEFINE_INSTANCED_PROP(float4, _BaseColor)
-	UNITY_DEFINE_INSTANCED_PROP(float, _Cutoff)
-UNITY_INSTANCING_BUFFER_END(UnityPerMaterial)
-
 struct Attributes {
 	float3 positionOS : POSITION;
 	float2 baseUV : TEXCOORD0;

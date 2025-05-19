@@ -93,7 +93,18 @@ public partial class CameraRenderer
             )
         {
             enableDynamicBatching = useDynamicBatching,
-            enableInstancing = useGPUInstancing
+            enableInstancing = useGPUInstancing,
+            //PerObjectData는 SRP에서 GPU로 전달할 객체의 추가적인 데이터를 설정합니다.
+            //중복 설정은 | 연산자를 사용합니다. ex) PerObjectData.Lightmaps | PerObjectData.LightProbe
+            //Lightmaps는 베이킹된 라이트 맵에 대해 객체의 라이트 맵 uv 데이터등을 GPU에 전달합니다.
+            //LightProbe는 각 객체가 사용하는 라이트 프로브에 대한 정보를 GPU에 전달합니다.
+            //LightProbeProxyVolume(LPPV)은 랜더링되는 객체가 LightProbeProxyVolume 컴포넌트를 가지고 있으면, 그 정보를 GPU에 전달합니다.
+            //LPPV는 동적 객체의 볼륨 데이터의 3D Float Texture를 제공합니다.
+            //ShadowMask는 객체의 쉐도우 마스크 데이터를 GPU에 전달하도록 설정합니다.
+            //OcclusionProbe는 동적객체의 라이트 프로브에 베이크된 그림자 정보를 GPU에 전달하도록 설정합니다.
+            //OcclusionProbeProxyVolume은 각 오브젝트의 LPPV에  베이크된 그림자 정보를 GPU에 전달하도록 설정합니다.
+            perObjectData = PerObjectData.Lightmaps | PerObjectData.LightProbe | PerObjectData.LightProbeProxyVolume | PerObjectData.ShadowMask | PerObjectData.OcclusionProbe
+                            | PerObjectData.OcclusionProbeProxyVolume
         };
         //LitShader를 랜더링
         drawingSettings.SetShaderPassName(1, litShaderTagId);

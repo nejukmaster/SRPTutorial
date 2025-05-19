@@ -8,6 +8,10 @@ public class Shadows
     struct ShadowedDirectionalLight
     {
         public int visibleLightIndex;
+        //경사 스케일 바이어스
+        public float slopeScaleBias;
+        //ShadowAtlas 랜더링시 NearPlane 오프셋
+        public float nearPlaneOffset;
     }
 
     //그림자 랜더링은 객체를 텍스쳐에 그리는 것으로 ShadowMap을 제작하여 이루어집니다.
@@ -18,16 +22,37 @@ public class Shadows
             //캐스케이드 단계 수와 Culling Sphere 정보를 담는 ShaderProperty를 정의
             cascadeCountId = Shader.PropertyToID("_CascadeCount"),
             cascadeCullingSpheresId = Shader.PropertyToID("_CascadeCullingSpheres"),
+            cascadeDataId = Shader.PropertyToID("_CascadeData"),
+            shadowAtlasSizeId = Shader.PropertyToID("_ShadowAtlasSize"),
             shadowDistanceFadeId = Shader.PropertyToID("_ShadowDistanceFade");
 
     //Culling Sphere는 각 캐스케이드 단계가 그림자를 생성하는 영역을 정의하는 구 영역입니다.
     //이는 구의 위치 x,y,z와 구의 반지를 w로 구성되는 Vector4로 정의됩니다.
-    static Vector4[] cascadeCullingSpheres = new Vector4[maxCascades];
+    static Vector4[] 
+        cascadeCullingSpheres = new Vector4[maxCascades],
+        cascadeData = new Vector4[maxCascades];
 
     //각 조명별 그림자 변환 행렬을 저장
     //그림자 변환 행렬은 주어진 세계를 좌표그림자 텍스쳐 좌표로 변환해 줍니다.
     static Matrix4x4[]
         dirShadowMatrices = new Matrix4x4[maxShadowedDirectionalLightCount * maxCascades];
+
+    static string[] directionalFilterKeywords = {
+        "_DIRECTIONAL_PCF3",
+        "_DIRECTIONAL_PCF5",
+        "_DIRECTIONAL_PCF7",
+    };
+
+    //Soft, Dither 캐스케이드 블랜딩에 대한 키워드 설정
+    static string[] cascadeBlendKeywords = {
+        "_CASCADE_BLEND_SOFT",
+        "_CASCADE_BLEND_DITHER"
+    };
+
+    //셰이더에 쉐도우 마스크에 대한 정보를 넘겨줄 키워드 설정
+    static string[] shadowMaskKeywords = {
+        "_SHADOW_MASK_DISTANCE"
+    };
 
 
     ShadowedDirectionalLight[] ShadowedDirectionalLights = new ShadowedDirectionalLight[maxShadowedDirectionalLightCount];
@@ -48,6 +73,9 @@ public class Shadows
 
     int ShadowedDirectionalLightCount;
 
+    //쉐도우 마스크 사용 여부
+    bool useShadowMask;
+
     public void Setup(
         ScriptableRenderContext context, CullingResults cullingResults,
         ShadowSettings settings
@@ -57,28 +85,50 @@ public class Shadows
         this.cullingResults = cullingResults;
         this.settings = settings;
         ShadowedDirectionalLightCount = 0;
+        this.useShadowMask = false;
     }
 
     //조명에 그림자 랜더링을 예약하는 메소드
     //ShadowAtlas에 조명에 의한 Shadow Map이 생성된 경우 해당 그림자의 강도와 그림자 타일 오프셋을 같이 반환, 그렇지 않을 경우 영벡터를 반환
-    public Vector2 ReserveDirectionalShadows(Light light, int visibleLightIndex) 
+    public Vector3 ReserveDirectionalShadows(Light light, int visibleLightIndex) 
     {
         //현재 그림자를 예약한 조명의 수가 최대 그림자 랜더링 가능한 조명의 수보다 적은지 체크
         //조명이 그림자를 랜더링하는지, 그림자 강도가 0보다 큰지 체크
-        //해당 조명의 그림자가 컬링 되어있는지 체크(거리 등에 의해 그림자를 드리우지 않을 수 있음)
-        if (ShadowedDirectionalLightCount < maxShadowedDirectionalLightCount && light.shadows != LightShadows.None && light.shadowStrength > 0f && cullingResults.GetShadowCasterBounds(visibleLightIndex, out Bounds b))
+        if (ShadowedDirectionalLightCount < maxShadowedDirectionalLightCount && light.shadows != LightShadows.None && light.shadowStrength > 0f)
         {
+            //쉐도우 마스크를 사용하는 조명이 있는지 체크하여 useShadowMask 프로퍼티를 설정
+            //LightBakingOutput은 각 조명의 베이킹된 라이팅에 대한 정보를 담고있는 구조체입니다.
+            LightBakingOutput lightBaking = light.bakingOutput;
+            if (
+                //Mixed 조명이 MixedLightingMode가 Shadowmask로 설정되어있다면, 해당 조명은 쉐도우 마스크를 사용하여 베이킹된 조명입니다.
+                lightBaking.lightmapBakeType == LightmapBakeType.Mixed &&
+                lightBaking.mixedLightingMode == MixedLightingMode.Shadowmask
+            )
+            {
+                useShadowMask = true;
+            }
+            //해당 조명의 그림자가 컬링 되어있는지 체크(거리 등에 의해 그림자를 드리우지 않을 수 있음)
+            if (!cullingResults.GetShadowCasterBounds(visibleLightIndex, out Bounds b))
+            {
+                //조명이 컬링되어 있어도 조명의 그림자 세기가 0보다 크면 유니티는 그림자 맵을 샘플링하므로 이를 방지.
+                //구워진 그림자를 샘플링할때만 이를 절대값으로 받아 해당 조명이 컬링되어 있어도 구워진 그림자는 그리도록 설계
+                return new Vector3(-light.shadowStrength, 0f, 0f);
+            }
             //그림자를 랜더링하는 조명을 생성하고 저장 후, 예약한 조명의 수를 증가
             ShadowedDirectionalLights[ShadowedDirectionalLightCount] =
                 new ShadowedDirectionalLight
                 {
-                    visibleLightIndex = visibleLightIndex
+                    visibleLightIndex = visibleLightIndex,
+                    slopeScaleBias = light.shadowBias,
+                    nearPlaneOffset = light.shadowNearPlane
                 };
-           return new Vector2(
-                    light.shadowStrength, settings.directional.cascadeCount * ShadowedDirectionalLightCount++
+           return new Vector3(
+                    light.shadowStrength,
+                    settings.directional.cascadeCount * ShadowedDirectionalLightCount++,
+                    light.shadowNormalBias
            );
         }
-        return Vector2.zero;
+        return Vector3.zero;
     }
 
     //그림자 랜더링
@@ -96,6 +146,10 @@ public class Shadows
                 32, FilterMode.Bilinear, RenderTextureFormat.Shadowmap
             );
         }
+        buffer.BeginSample(bufferName);
+        SetKeywords(shadowMaskKeywords, useShadowMask ? 0 : -1);
+        buffer.EndSample(bufferName);
+        ExecuteBuffer();
     }
 
     public void Cleanup()
@@ -132,6 +186,7 @@ public class Shadows
         buffer.SetGlobalVectorArray(
             cascadeCullingSpheresId, cascadeCullingSpheres
         );
+        buffer.SetGlobalVectorArray(cascadeDataId, cascadeData);
         //그림자 변환 행렬을 global shader property로 넘겨줍니다.
         buffer.SetGlobalMatrixArray(dirShadowMatricesId, dirShadowMatrices);
         //그림자 최대거리를 프로퍼티로 넘겨줍니다.
@@ -142,6 +197,17 @@ public class Shadows
         buffer.SetGlobalVector(
             shadowDistanceFadeId,
             new Vector4(1f / settings.maxDistance, 1f / settings.distanceFade, 1f/(1f-f*f))
+        );
+        //Directional Lilght 설정값에 따른 각 키워드 활성화
+        SetKeywords(
+            directionalFilterKeywords, (int)settings.directional.filter - 1
+        );
+        SetKeywords(
+            cascadeBlendKeywords, (int)settings.directional.cascadeBlend - 1
+        );
+        buffer.SetGlobalVector(
+                                //x구성요소에 아틀라스의 크기를, y구성요소에 아틀라스의 텍셀 사이즈를 저장합니다.
+            shadowAtlasSizeId, new Vector4(atlasSize, 1f / atlasSize)
         );
         buffer.EndSample(bufferName);
         ExecuteBuffer();
@@ -156,10 +222,12 @@ public class Shadows
         int tileOffset = index * cascadeCount;
         Vector3 ratios = settings.directional.CascadeRatios;
 
+        float cullingFactor = Mathf.Max(0f, 0.8f - settings.directional.cascadeFade);
+
         //각 거리별 그림자 맵을 그린다.
         for (int i = 0; i < cascadeCount; i++)
         {
-            //쉐도우 맵의 아이디어는 조명의 입장에서 씬의 깊이 정보만 랜더링하는것입니다.
+            //쉐도우 맵의 아이디어는 조명의 시점에서 씬의 깊이 정보만 랜더링하는것입니다.
             //Directional Light는 실제 위치가 없는 방향만 존재하므로 카메라의 입장에서 Directional Light와 일치하는 방향의 뷰 및 투영행렬을 구하여 랜더링을 수행합니다.
             //해당 과정은 CullingResults 클래스의 ComputeDirectionalShadowMatricesAndCullingPrimitives 메서드를 통해 구할 수 있습니다.
             // 1. 랜더링 하고자하는 조명의 visibleLightIndex
@@ -168,21 +236,18 @@ public class Shadows
             // 6. 평면 근처 그림자
             // 7. 결과에 따른 각 출력값
             cullingResults.ComputeDirectionalShadowMatricesAndCullingPrimitives(
-                light.visibleLightIndex, i, cascadeCount, ratios, tileSize, 0f,
-                out Matrix4x4 viewMatrix, out Matrix4x4 projectionMatrix,
+                light.visibleLightIndex, i, cascadeCount, ratios, tileSize,
+                light.nearPlaneOffset, out Matrix4x4 viewMatrix, out Matrix4x4 projectionMatrix,
                 out ShadowSplitData splitData
             );
+            splitData.shadowCascadeBlendCullingFactor = cullingFactor;
             //ShadowSplitData를 Settings에 복사
             //ShadowSplitData에는 그림자를 드리우는 객체를 컬링하는 방법에 대한 정보가 저장되어있습니다.
             shadowSettings.splitData = splitData;
             //또한 ShadowSplitData에는 캐스케이드에 따른 계산된 Culling Sphere의 데이터도 같이 저장되어 있으므로, 이를 매핑해줍니다.
             if (index == 0)
             {
-                //ShadowSplitData에서의 Culling Sphere 데이터는 w값으로 구의 반지름을 저장하고있는데, 각 fragment가 Culling Sphere 안에 있는지에 대한 계산은 Culling Sphere의 반지름 제곱을 통해 계산되므로,
-                //쉐이더 단의 연산을 줄이고자 CPU에서 미리 반지름 제곱을 계산하여 GPU로 넘겨준다.
-                Vector4 cullingSphere = splitData.cullingSphere;
-                cullingSphere.w *= cullingSphere.w;
-                cascadeCullingSpheres[i] = cullingSphere;
+                SetCascadeData(i, splitData.cullingSphere, tileSize);
             }
 
             int tileIndex = tileOffset + i;
@@ -196,8 +261,27 @@ public class Shadows
             //현재 버퍼의 뷰 및 투영행렬을 설정
             buffer.SetViewProjectionMatrices(viewMatrix, projectionMatrix);
 
+            buffer.SetGlobalDepthBias(0f, light.slopeScaleBias);
             ExecuteBuffer();
             context.DrawShadows(ref shadowSettings);
+            buffer.SetGlobalDepthBias(0f, 0f);
+        }
+    }
+
+    //ShaderKeyword는 기본적으로 On/Off
+    //여러개의 키워드중에 켤 키워드의 인덱스를 받아 On, 나머지는 Off로 설정하는 메서드
+    void SetKeywords(string[] keywords, int enabledIndex)
+    {
+        for (int i = 0; i < keywords.Length; i++)
+        {
+            if (i == enabledIndex)
+            {
+                buffer.EnableShaderKeyword(keywords[i]);
+            }
+            else
+            {
+                buffer.DisableShaderKeyword(keywords[i]);
+            }
         }
     }
 
@@ -237,6 +321,23 @@ public class Shadows
             offset.x * tileSize, offset.y * tileSize, tileSize, tileSize
         ));
         return offset;
+    }
+
+    void SetCascadeData(int index, Vector4 cullingSphere, float tileSize)
+    {
+        float texelSize = 2f * cullingSphere.w / tileSize;
+        //필터의 텍셀사이즈는 캐스케이드의 텍셀사이즈에 필터 크기를 곱하여 생성한다.
+        //이거 안해주면 바이어스와 필터가 맞지 않아 Shadow Acne가 다시 나타나게된다.
+        float filterSize = texelSize * ((float)settings.directional.filter + 1f);
+        //ShadowSplitData에서의 Culling Sphere 데이터는 w값으로 구의 반지름을 저장하고있는데, 각 fragment가 Culling Sphere 안에 있는지에 대한 계산은 Culling Sphere의 반지름 제곱을 통해 계산되므로,
+        //쉐이더 단의 연산을 줄이고자 CPU에서 미리 반지름 제곱을 계산하여 GPU로 넘겨준다.
+        cullingSphere.w *= cullingSphere.w;
+        cascadeCullingSpheres[index] = cullingSphere;
+        cascadeData[index] = new Vector4(
+            1f / cullingSphere.w,
+            //필터 크기에 따라 조정된 텍셀의 대각선 길이로 바이어스를 설정
+            filterSize * 1.4142136f//root(2)
+        );
     }
 
     void ExecuteBuffer()
