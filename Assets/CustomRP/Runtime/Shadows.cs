@@ -51,6 +51,9 @@ public class Shadows
 
     //셰이더에 쉐도우 마스크에 대한 정보를 넘겨줄 키워드 설정
     static string[] shadowMaskKeywords = {
+        //shadowmask 모드
+        "_SHADOW_MASK_ALWAYS",
+        //distance shadowmask 모드
         "_SHADOW_MASK_DISTANCE"
     };
 
@@ -90,12 +93,16 @@ public class Shadows
 
     //조명에 그림자 랜더링을 예약하는 메소드
     //ShadowAtlas에 조명에 의한 Shadow Map이 생성된 경우 해당 그림자의 강도와 그림자 타일 오프셋을 같이 반환, 그렇지 않을 경우 영벡터를 반환
-    public Vector3 ReserveDirectionalShadows(Light light, int visibleLightIndex) 
+    public Vector4 ReserveDirectionalShadows(Light light, int visibleLightIndex) 
     {
         //현재 그림자를 예약한 조명의 수가 최대 그림자 랜더링 가능한 조명의 수보다 적은지 체크
         //조명이 그림자를 랜더링하는지, 그림자 강도가 0보다 큰지 체크
         if (ShadowedDirectionalLightCount < maxShadowedDirectionalLightCount && light.shadows != LightShadows.None && light.shadowStrength > 0f)
         {
+            //각 조명이 사용하는 쉐도우 마스크 채널을 나타냄
+            //쉐도우 마스크 텍스쳐는 rgba 총 네개의 채널을 사용하므로 총 네개의 Mixed 조명이 구운 그림자를 생성할 수 있습니다.
+            //조명이 쉐도우 마스크를 사용하지 않을경우 
+            float maskChannel = -1;
             //쉐도우 마스크를 사용하는 조명이 있는지 체크하여 useShadowMask 프로퍼티를 설정
             //LightBakingOutput은 각 조명의 베이킹된 라이팅에 대한 정보를 담고있는 구조체입니다.
             LightBakingOutput lightBaking = light.bakingOutput;
@@ -106,13 +113,15 @@ public class Shadows
             )
             {
                 useShadowMask = true;
+                maskChannel = lightBaking.occlusionMaskChannel;
             }
             //해당 조명의 그림자가 컬링 되어있는지 체크(거리 등에 의해 그림자를 드리우지 않을 수 있음)
             if (!cullingResults.GetShadowCasterBounds(visibleLightIndex, out Bounds b))
             {
                 //조명이 컬링되어 있어도 조명의 그림자 세기가 0보다 크면 유니티는 그림자 맵을 샘플링하므로 이를 방지.
                 //구워진 그림자를 샘플링할때만 이를 절대값으로 받아 해당 조명이 컬링되어 있어도 구워진 그림자는 그리도록 설계
-                return new Vector3(-light.shadowStrength, 0f, 0f);
+                //해당 조명의 그림자의 정보를 나타내는 벡터에 해당 조명이 사용하는 쉐도우 마스크 채널의 인덱스를 추가하여 반환합니다.
+                return new Vector4(-light.shadowStrength, 0f, 0f, maskChannel);
             }
             //그림자를 랜더링하는 조명을 생성하고 저장 후, 예약한 조명의 수를 증가
             ShadowedDirectionalLights[ShadowedDirectionalLightCount] =
@@ -122,13 +131,15 @@ public class Shadows
                     slopeScaleBias = light.shadowBias,
                     nearPlaneOffset = light.shadowNearPlane
                 };
-           return new Vector3(
+           return new Vector4(
                     light.shadowStrength,
                     settings.directional.cascadeCount * ShadowedDirectionalLightCount++,
-                    light.shadowNormalBias
+                    light.shadowNormalBias,
+                    maskChannel
            );
         }
-        return Vector3.zero;
+        //그림자를 생성하지 않는 조명의 경우 쉐도우 마스크의 인덱스를 -1로 설정합니다.
+        return new Vector4(0f, 0f, 0f, -1f);
     }
 
     //그림자 랜더링
@@ -147,7 +158,7 @@ public class Shadows
             );
         }
         buffer.BeginSample(bufferName);
-        SetKeywords(shadowMaskKeywords, useShadowMask ? 0 : -1);
+        SetKeywords(shadowMaskKeywords, useShadowMask ? QualitySettings.shadowmaskMode == ShadowmaskMode.Shadowmask ? 0 : 1 : -1);
         buffer.EndSample(bufferName);
         ExecuteBuffer();
     }

@@ -36,7 +36,10 @@ CBUFFER_END
 
 struct ShadowMask
 {
-	//쉐도우 마스크 구조체는 거리사용 여부 bool 프로퍼티와 베이크된 그림자를 나타내는 4차원 float 벡터를 사용합니다.
+	//쉐도우 마스크 구조체는 사용하는 쉐도우 마스크 모드의 bool 프로퍼티와 베이크된 그림자를 나타내는 4차원 float 벡터를 사용합니다.
+	//항상 쉐도우 마스크를 사용하는지 여부
+	bool always;
+	//거리 쉐도우 마스크를 사용하는지 여부
 	bool distance;
 	float4 shadows;
 };
@@ -54,8 +57,10 @@ float FadedShadowStrength(float distance, float scale, float fade) {
 
 ShadowData GetShadowData(Surface surfaceWS) {
 	ShadowData data;
-	//기본적으로 쉐도우마스크를 사용하지 않게 초기화
+	//기본적으로 거리 쉐도우 마스크를 사용하지 않게 초기화
 	data.shadowMask.distance = false;
+	//기본적으로 항상 쉐도우 마스크를 사용하지 않게 초기화
+	data.shadowMask.always = false;
 	data.shadowMask.shadows = 1.0;
 	//캐스케이드 블랜딩 Factor를 1.0(최대강도)로 초기화
 	data.cascadeBlend = 1.0;
@@ -105,6 +110,7 @@ struct DirectionalShadowData {
 	float strength;
 	int tileIndex;
 	float normalBias;
+	int shadowMaskChannel;
 };
 
 //STS(Shadow Texture Space)상의 그림자 데이터를 샘플링하는 메서드
@@ -158,27 +164,35 @@ float GetCascadedShadow(
 }
 
 //베이크된 그림자 마스크를 가져오는 함수
-float GetBakedShadow(ShadowMask mask) {
+float GetBakedShadow(ShadowMask mask, int channel) {
 	float shadow = 1.0;
-	//거리별 쉐도우마스크가 활성화 되어있을경우
-	if (mask.distance) {
-		//쉐도우 벡터의 R채널은 베이크된 정적 객체의 베이크된 그림자를 나타냅니다.
-		shadow = mask.shadows.r;
+	//거리별 쉐도우마스크 or 항상 쉐도우 마스크가 활성화 되어있을경우
+	if (mask.always || mask.distance) {
+		//채널이 0이상(쉐도우 마스크를 사용하는 조명에서만) 구운 그림자 마스크를 샘플링
+		if (channel >= 0){
+			//각 조명이 사용하는 채널의 구운 그림자 맵을 들고옵니다.
+			shadow = mask.shadows[channel];
+		}
 	}
 	return shadow;
 }
 
-float GetBakedShadow(ShadowMask mask, float strength) {
-	if (mask.distance) {
-		return lerp(1.0, GetBakedShadow(mask), strength);
+float GetBakedShadow(ShadowMask mask, int channel, float strength) {
+	if (mask.always || mask.distance) {
+		return lerp(1.0, GetBakedShadow(mask, channel), strength);
 	}
 	return 1.0;
 }
 
 //베이크된 그림자와 실시간 그림자를 혼합
-float MixBakedAndRealtimeShadows(ShadowData global, float shadow, float strength)
+float MixBakedAndRealtimeShadows(ShadowData global, float shadow, int shadowMaskChannel, float strength)
 {
-	float baked = GetBakedShadow(global.shadowMask);
+	float baked = GetBakedShadow(global.shadowMask, shadowMaskChannel);
+	if (global.shadowMask.always) {
+		shadow = lerp(1.0, shadow, global.strength);
+		shadow = min(baked, shadow);
+		return lerp(1.0, shadow, strength);
+	}
 	if (global.shadowMask.distance) {
 		//거리 쉐도우 마스크를 사용하는 객체의 경우 그림자데이터를 구운 그림자를 우선적으로 사용
 		//컬링된 조명의 구워진 그림자도 표시하도록 절대값으로 전달
@@ -198,11 +212,11 @@ float GetDirectionalShadowAttenuation(DirectionalShadowData directional, ShadowD
 	//최신 GPU의 경우 if문 분기를 잘 처리하나, 낮은 GPU에서는 그렇지 않으므로 주의
 	//실시간 그림자 세기와 구운 그림자 세기를 곱하여 어느 하나라도 0의 값을 가질경우 그림자 거리보다 멀어졌다고 판다하여 구운 그림자만 사용합니다.
 	if (directional.strength * global.strength <= 0.0) {
-		shadow = GetBakedShadow(global.shadowMask, directional.strength);
+		shadow = GetBakedShadow(global.shadowMask, directional.shadowMaskChannel, abs(directional.strength));
 	}
 	else {
 		shadow = GetCascadedShadow(directional, global, surfaceWS);
-		shadow = MixBakedAndRealtimeShadows(global, shadow, directional.strength);
+		shadow = MixBakedAndRealtimeShadows(global, shadow, directional.shadowMaskChannel, directional.strength);
 	}
 	return shadow;
 }

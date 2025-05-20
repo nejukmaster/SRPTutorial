@@ -2,7 +2,7 @@
 #define CUSTOM_COMMON_INCLUDED
 
 //쉐도우 마스크가 오쿨루젼 프로브를 통해 돌아갈 경우, Unity의 GPU Instancing을 방해한다. 이는 SHADOWS_SHADOWMASK 키워드를 정의하는 것으로 해결할 수 있다.
-#if defined(_SHADOW_MASK_DISTANCE)
+#if defined(_SHADOW_MASK_ALWAYS) || defined(_SHADOW_MASK_DISTANCE)
 	#define SHADOWS_SHADOWMASK
 #endif
 

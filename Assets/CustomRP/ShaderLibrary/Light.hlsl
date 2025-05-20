@@ -30,6 +30,8 @@ DirectionalShadowData GetDirectionalShadowData(int lightIndex, ShadowData shadow
 	//그림자 맵 인덱스 y축에 캐스케이드 인덱스를 더해줍니다.
 	data.tileIndex = _DirectionalLightShadowData[lightIndex].y + shadowData.cascadeIndex;
 	data.normalBias = _DirectionalLightShadowData[lightIndex].z;
+	//사용하는 쉐도우 마스크 채널을 가져옵니다.
+	data.shadowMaskChannel = _DirectionalLightShadowData[lightIndex].w;
 	return data;
 }
 

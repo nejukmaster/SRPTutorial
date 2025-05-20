@@ -97,11 +97,15 @@ GI GetGI(float2 lightMapUV, Surface surfaceWS) {
 	GI gi;
 	gi.diffuse = SampleLightMap(lightMapUV) + SampleLightProbe(surfaceWS);
 	//GI에서도 마찬가지로 기본적으로 쉐도우 마스크를 사용하지 않도록합니다.
+	gi.shadowMask.always = false;
 	gi.shadowMask.distance = false;
 	gi.shadowMask.shadows = 1.0;
-
+	//_SHADOW_MASK_ALWAYS가 활성화 되어있는 경우 쉐도우 마스크 사용을 설정하고 베이크된 그림자를 샘플링
+#if defined(_SHADOW_MASK_ALWAYS)
+	gi.shadowMask.always = true;
+	gi.shadowMask.shadows = SampleBakedShadows(lightMapUV, surfaceWS);
 	//_SHADOW_MASK_DISTANCE가 활성화 되어있는 경우 쉐도우 마스크 사용을 설정하고 베이크된 그림자를 샘플링
-#if defined(_SHADOW_MASK_DISTANCE)
+#elif defined(_SHADOW_MASK_DISTANCE)
 	gi.shadowMask.distance = true;
 	gi.shadowMask.shadows = SampleBakedShadows(lightMapUV, surfaceWS);
 #endif
