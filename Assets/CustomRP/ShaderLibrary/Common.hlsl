@@ -8,6 +8,7 @@
 
 #include "Graphics/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/CommonMaterial.hlsl"
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Packing.hlsl"
 #include "UnityInput.hlsl"
 /*
 //오브젝트 좌표를 월드 좌표로 변환하는 함수
@@ -44,6 +45,26 @@ float Square(float v) {
 //두 지점사이의 제곱 거리를 계산하는 함수
 float DistanceSquared(float3 pA, float3 pB) {
 	return dot(pA - pB, pA - pB);
+}
+
+void ClipLOD(float2 positionCS, float fade) {
+#if defined(LOD_FADE_CROSSFADE)
+	//반투명 그림자에서 사용한 그래디언트 노이즈를 디더링에 사용합니다.
+	float dither = InterleavedGradientNoise(positionCS.xy, 0);
+	//LOD의 크로스 페이드 팩터를 검사하여 음수 팩터(다음 LOD)의 경우 더하고 그렇지 않을 경우(이전 LOD)의 경우 빼서 클리핑
+	clip(fade + (fade < 0.0 ? dither : -dither));
+#endif
+}
+
+//노멀맵의 픽셀을 디코딩하는 함수
+//노멀맵은 RGB에 XYZ를 저장하며, 법선벡터는 Surface에서 제공되므로 B채널 샘플링을 생략해도 무방합니다.
+//플랫폼에 따라 노멀맵이 변경되기도하며, DXT5(BC3) 포멧으로 압축된 텍스쳐는 UnpackNormalRGB로, 그렇지 않은 경우는 UnpackNormalmapRGorAG 메서드로 텍스쳐의 압축을 해제합니다.
+float3 DecodeNormal(float4 sample, float scale) {
+#if defined(UNITY_NO_DXT5nm)
+	return normalize(UnpackNormalRGB(sample, scale));
+#else
+	return normalize(UnpackNormalmapRGorAG(sample, scale));
+#endif
 }
 
 #endif

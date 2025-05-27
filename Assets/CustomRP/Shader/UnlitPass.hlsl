@@ -38,8 +38,10 @@ Varyings UnlitPassVertex(Attributes input) {
 
 float4 UnlitPassFragment(Varyings input) : SV_TARGET{
 	UNITY_SETUP_INSTANCE_ID(input);
+	InputConfig config = GetInputConfig(input.baseUV);
+
 	//GPU 인스턴싱을 사용할 경우 UNITY_ACCESS_INSTANCED_PROP을 통해 인스턴싱된 머티리얼의 프로퍼티 블록에 접근할 수 있습니다.
-	float4 baseMap = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.baseUV);
+	float4 baseMap = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, config.baseUV);
 	float4 baseColor = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _BaseColor);
 	//_CLIPPING이 설정되어 있을때만 알파 클리핑
 	float4 base = baseMap * baseColor;

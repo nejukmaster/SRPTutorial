@@ -103,8 +103,9 @@ public partial class CameraRenderer
             //ShadowMask는 객체의 쉐도우 마스크 데이터를 GPU에 전달하도록 설정합니다.
             //OcclusionProbe는 동적객체의 라이트 프로브에 베이크된 그림자 정보를 GPU에 전달하도록 설정합니다.
             //OcclusionProbeProxyVolume은 각 오브젝트의 LPPV에  베이크된 그림자 정보를 GPU에 전달하도록 설정합니다.
+            //ReflectionProbes는 지금 랜더링하는 객체가 속한 ReflectionProbe의 큐브맵이나 반사 기준위치 등을 전달하도록 설정합니다.
             perObjectData = PerObjectData.Lightmaps | PerObjectData.LightProbe | PerObjectData.LightProbeProxyVolume | PerObjectData.ShadowMask | PerObjectData.OcclusionProbe
-                            | PerObjectData.OcclusionProbeProxyVolume
+                            | PerObjectData.OcclusionProbeProxyVolume | PerObjectData.ReflectionProbes
         };
         //LitShader를 랜더링
         drawingSettings.SetShaderPassName(1, litShaderTagId);

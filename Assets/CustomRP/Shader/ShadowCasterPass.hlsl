@@ -39,7 +39,12 @@ Varyings ShadowCasterPassVertex(Attributes input) {
 
 void ShadowCasterPassFragment(Varyings input) {
 	UNITY_SETUP_INSTANCE_ID(input);
-	float4 baseMap = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.baseUV);
+	InputConfig config = GetInputConfig(input.baseUV);
+
+	//LOD에 따른 페이딩 처리
+	ClipLOD(input.positionCS.xy, unity_LODFade.x);
+
+	float4 baseMap = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, config.baseUV);
 	float4 baseColor = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _BaseColor);
 	float4 base = baseMap * baseColor;
 #if defined(_SHADOWS_CLIP)

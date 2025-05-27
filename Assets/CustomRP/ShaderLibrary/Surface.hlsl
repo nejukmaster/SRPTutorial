@@ -6,12 +6,15 @@ struct Surface {
 	//표면 픽셀의 월드 포지션
 	float3 position;
 	float3 normal;
+	float3 interpolatedNormal;
 	float3 viewDirection;
 	float depth;
 	float3 color;
 	float alpha; 
 	float metallic;
+	float occlusion;
 	float smoothness;
+	float fresnelStrength;
 	float dither;
 };
 

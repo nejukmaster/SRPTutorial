@@ -18,27 +18,32 @@ float2 TransformBaseUV(float2 baseUV) {
 	return baseUV * baseST.xy + baseST.zw;
 }
 
-float4 GetBase(float2 baseUV) {
-	float4 map = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, baseUV);
+float4 GetBase(InputConfig c) {
+	float4 map = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, c.baseUV);
 	float4 color = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _BaseColor);
 	return map * color;
 }
 
-float GetCutoff(float2 baseUV) {
+//각 공통 패스에서 컴파일 에러를 방지하기 위한 더미 메서드
+float GetCutoff(InputConfig c) {
 	return UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Cutoff);
 }
 
-float GetMetallic(float2 baseUV) {
+float GetMetallic(InputConfig c) {
 	return 0.0;
 }
 
-float GetSmoothness(float2 baseUV) {
+float GetSmoothness(InputConfig c) {
 	return 0.0;
 }
 
+float GetFresnel(InputConfig c) {
+	return 0.0;
+}
 
-float3 GetEmission(float2 baseUV) {
-	return GetBase(baseUV).rgb;
+//Unlit 객체는 디퓨즈를 그대로 방출
+float3 GetEmission(InputConfig c) {
+	return GetBase(c).rgb;
 }
 
 #endif

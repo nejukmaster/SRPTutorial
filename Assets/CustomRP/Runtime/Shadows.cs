@@ -34,8 +34,7 @@ public class Shadows
 
     //각 조명별 그림자 변환 행렬을 저장
     //그림자 변환 행렬은 주어진 세계를 좌표그림자 텍스쳐 좌표로 변환해 줍니다.
-    static Matrix4x4[]
-        dirShadowMatrices = new Matrix4x4[maxShadowedDirectionalLightCount * maxCascades];
+    static Matrix4x4[] dirShadowMatrices = new Matrix4x4[maxShadowedDirectionalLightCount * maxCascades];
 
     static string[] directionalFilterKeywords = {
         "_DIRECTIONAL_PCF3",

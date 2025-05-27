@@ -10,6 +10,8 @@ CBUFFER_START(UnityPerDraw)
 	float4 unity_WorldTransformParams;
 	//유니티의 베이크된 그림자의 경우 동적객체의 라이트 프로브에 베이크하여 나타내며, 이를 오쿨루전 프로브라고 한다.
 	float4 unity_ProbesOcclusion;
+	float4 unity_SpecCube0_HDR;
+
 	float3 _WorldSpaceCameraPos;
 
 	//PerObjectData.Lightmaps로 인해 전달되는 객체의 라이트 맵 좌표
